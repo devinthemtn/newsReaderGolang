@@ -129,6 +129,7 @@ func New(cfg *config.Config, db *database.DB, fetcher *feed.Fetcher, aiClient *a
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadArticles(m.db, m.cfg),
+		fetchFeeds(m.fetcher, m.db, m.aiClient, m.cfg),
 		tea.EnterAltScreen,
 	)
 }
@@ -258,6 +259,12 @@ func (m Model) handleListKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			func() tea.Msg { return statusMsg("Fetching new articles...") },
 		)
 
+	case "d":
+		return m, tea.Batch(
+			deleteOldArticles(m.db, m.cfg),
+			func() tea.Msg { return statusMsg("Deleting old articles...") },
+		)
+
 	case "?":
 		m.view = ViewHelp
 		return m, nil
@@ -380,7 +387,7 @@ func (m Model) renderList() string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(helpStyle.Render("enter: read • o: open browser • /,f: filter • r: refresh • F: fetch new • ?: help • q: quit"))
+	s.WriteString(helpStyle.Render("enter: read • o: open browser • /,f: filter • r: refresh • F: fetch new • d: delete old • ?: help • q: quit"))
 
 	return s.String()
 }
@@ -420,6 +427,7 @@ Article List:
   /,f          Quick filter by title
   r            Refresh article list
   F            Fetch new articles from feeds
+  d            Delete old articles (older than configured max age)
   q, ctrl+c    Quit
 
 Filter Mode:
@@ -475,6 +483,40 @@ func fetchFeeds(fetcher *feed.Fetcher, db *database.DB, aiClient *ai.Client, cfg
 		}
 
 		return statusMsg(fmt.Sprintf("Fetched %d new articles", count))
+	}
+}
+
+func deleteOldArticles(db *database.DB, cfg *config.Config) tea.Cmd {
+	return func() tea.Msg {
+		maxAge := time.Duration(cfg.UI.ArticleMaxAgeDays) * 24 * time.Hour
+		
+		// Get count before deletion for reporting
+		articles, _ := db.GetUnreadArticles(maxAge * 10) // Get articles older than max age
+		oldCount := 0
+		cutoff := time.Now().Add(-maxAge)
+		for _, article := range articles {
+			if article.PublishedAt.Before(cutoff) {
+				oldCount++
+			}
+		}
+		
+		// Delete old articles
+		if err := db.DeleteOldArticles(maxAge); err != nil {
+			return errorMsg{err}
+		}
+		
+		// Also delete read articles
+		if err := db.DeleteReadArticles(); err != nil {
+			return errorMsg{err}
+		}
+		
+		// Reload articles after deletion
+		articles, err := db.GetUnreadArticles(maxAge)
+		if err != nil {
+			return errorMsg{err}
+		}
+		
+		return articlesLoadedMsg{articles}
 	}
 }
 
