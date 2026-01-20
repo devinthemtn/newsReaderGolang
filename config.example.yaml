@@ -1,0 +1,64 @@
+database:
+  path: ~/.config/newsreader/data.db
+
+feeds:
+  # General Tech News
+  - url: https://hnrss.org/frontpage
+    name: Hacker News
+  - url: https://www.theverge.com/rss/index.xml
+    name: The Verge
+  - url: https://feeds.arstechnica.com/arstechnica/index
+    name: Ars Technica
+  - url: https://techcrunch.com/feed/
+    name: TechCrunch
+  
+  # Developer/Coding Focused
+  - url: https://dev.to/feed
+    name: DEV Community
+  - url: https://blog.golang.org/feed.atom
+    name: Go Blog
+  - url: https://github.blog/feed/
+    name: GitHub Blog
+  - url: https://stackoverflow.blog/feed/
+    name: Stack Overflow Blog
+  
+  # Programming Languages & Frameworks
+  - url: https://blog.rust-lang.org/feed.xml
+    name: Rust Blog
+  - url: https://blog.jetbrains.com/feed/
+    name: JetBrains Blog
+  
+  # DevOps & Cloud
+  - url: https://kubernetes.io/feed.xml
+    name: Kubernetes Blog
+  - url: https://aws.amazon.com/blogs/aws/feed/
+    name: AWS News Blog
+  
+  # Security & Privacy
+  - url: https://krebsonsecurity.com/feed/
+    name: Krebs on Security
+  - url: https://www.schneier.com/feed/atom/
+    name: Schneier on Security
+  
+  # Open Source & Linux
+  - url: https://www.phoronix.com/rss.php
+    name: Phoronix
+  - url: https://opensource.com/feed
+    name: OpenSource.com
+
+interests:
+  - "artificial intelligence and machine learning"
+  - "golang programming and software development"
+  - "climate change and renewable energy technology"
+  - "cybersecurity and privacy"
+
+ollama:
+  host: http://localhost:11434
+  model: llama2
+
+raindrop:
+  api_token: your_raindrop_api_token_here
+
+ui:
+  refresh_interval: 15m
+  article_max_age_days: 14
