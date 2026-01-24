@@ -2,6 +2,10 @@
 
 A Terminal User Interface (TUI) application for reading and filtering news articles based on your interests using AI-powered semantic matching.
 
+## Status
+
+✅ **Built and Ready to Use!** The application has been successfully built and tested.
+
 ## Features
 
 - 📰 **RSS Feed Support**: Fetch articles from multiple RSS feeds
@@ -22,9 +26,8 @@ A Terminal User Interface (TUI) application for reading and filtering news artic
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/thomaskoefod/newsreadr.git
-cd newsreadr
+# Navigate to the project directory
+cd newsReaderGolang
 
 # Build the application
 go build -o newsreadr cmd/newsreadr/main.go
@@ -32,6 +35,31 @@ go build -o newsreadr cmd/newsreadr/main.go
 # Move to PATH (optional)
 sudo mv newsreadr /usr/local/bin/
 ```
+
+## Quick Setup
+
+1. **Build the application** (if not already done):
+   ```bash
+   go build -o newsreadr cmd/newsreadr/main.go
+   ```
+
+2. **Run for the first time** to create default configuration:
+   ```bash
+   ./newsreadr
+   ```
+   
+   This will create a default config at `~/.config/newsreader/config.yaml` and exit.
+
+3. **Install Ollama** (optional, for AI-powered article scoring):
+   ```bash
+   curl https://ollama.ai/install.sh | sh
+   ollama pull llama2
+   ```
+
+4. **Run the application**:
+   ```bash
+   ./newsreadr
+   ```
 
 ## Quick Start
 
@@ -141,24 +169,45 @@ newsreadr/
 └── pkg/models/             # Shared data models
 ```
 
+## Testing
+
+Run the included test script to verify everything is working:
+
+```bash
+chmod +x test_app.sh
+./test_app.sh
+```
+
 ## Troubleshooting
 
-### Ollama Connection Error
-Make sure Ollama is running:
+### Ollama Connection Warnings
+If you see warnings about Ollama connection, that's expected if Ollama isn't installed. The app will work without AI scoring - articles will just have a score of 0.
+
+To enable AI scoring:
 ```bash
-ollama serve
+curl https://ollama.ai/install.sh | sh
+ollama pull llama2
+ollama serve  # Run in a separate terminal
 ```
 
 ### No Articles Showing
-1. Press `f` to fetch articles
-2. Check that your feeds are valid RSS feeds
-3. Verify articles are less than 2 weeks old
+1. Press `F` to fetch articles from RSS feeds
+2. Press `f` to filter articles by title
+3. Check that your feeds are valid RSS feeds
+4. Verify articles are less than 2 weeks old
 
 ### Low Relevance Scores
 The AI scoring is based on semantic similarity to your interests. Try:
 - Making your interests more specific
-- Adding more varied interest descriptions
+- Adding more varied interest descriptions  
 - Using a different Ollama model (e.g., `mistral`)
+
+### Database Issues
+If you encounter database issues, you can reset by deleting:
+```bash
+rm -rf ~/.config/newsreader/
+```
+Then run the app again to recreate the configuration and database.
 
 ## License
 

@@ -2,11 +2,19 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/thomaskoefod/newsreadr/pkg/models"
 	_ "modernc.org/sqlite"
+)
+
+var (
+	ErrFeedExists = errors.New("feed already exists")
 )
 
 type DB struct {
@@ -87,5 +95,40 @@ func (db *DB) initSchema() error {
 		return fmt.Errorf("creating schema: %w", err)
 	}
 
+	return nil
+}
+
+// AddFeed adds a feed by URL and name (convenience method)
+func (db *DB) AddFeed(url, name string) error {
+	feed := &models.Feed{
+		URL:       url,
+		Name:      name,
+		Enabled:   true,
+		CreatedAt: time.Now(),
+	}
+
+	err := db.AddFeedModel(feed)
+	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		return ErrFeedExists
+	}
+	return err
+}
+
+// AddFeedModel inserts a new feed using a Feed model
+func (db *DB) AddFeedModel(feed *models.Feed) error {
+	result, err := db.Exec(
+		"INSERT INTO feeds (url, name, enabled, created_at) VALUES (?, ?, ?, ?)",
+		feed.URL, feed.Name, feed.Enabled, feed.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting feed: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("getting last insert id: %w", err)
+	}
+
+	feed.ID = id
 	return nil
 }

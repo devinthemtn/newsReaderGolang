@@ -8,25 +8,6 @@ import (
 	"github.com/thomaskoefod/newsreadr/pkg/models"
 )
 
-// AddFeed inserts a new feed
-func (db *DB) AddFeed(feed *models.Feed) error {
-	result, err := db.Exec(
-		"INSERT INTO feeds (url, name, enabled, created_at) VALUES (?, ?, ?, ?)",
-		feed.URL, feed.Name, feed.Enabled, time.Now(),
-	)
-	if err != nil {
-		return fmt.Errorf("inserting feed: %w", err)
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("getting last insert id: %w", err)
-	}
-
-	feed.ID = id
-	return nil
-}
-
 // GetFeeds retrieves all feeds
 func (db *DB) GetFeeds() ([]models.Feed, error) {
 	rows, err := db.Query("SELECT id, url, name, enabled, created_at FROM feeds ORDER BY created_at DESC")
@@ -92,7 +73,7 @@ func (db *DB) DeleteFeed(id int64) error {
 func (db *DB) AddArticle(article *models.Article) error {
 	result, err := db.Exec(
 		"INSERT INTO articles (feed_id, title, url, content, description, published_at, fetched_at, relevance_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		article.FeedID, article.Title, article.URL, article.Content, article.Description, article.PublishedAt, time.Now(), article.RelevanceScore,
+		article.FeedID, article.Title, article.URL, article.Content, article.Description, article.PublishedAt, article.FetchedAt, article.RelevanceScore,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting article: %w", err)

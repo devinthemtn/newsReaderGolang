@@ -18,13 +18,13 @@ type Client struct {
 }
 
 type RaindropItem struct {
-	Link  string `json:"link"`
-	Title string `json:"title"`
+	Link    string `json:"link"`
+	Title   string `json:"title"`
 	Excerpt string `json:"excerpt,omitempty"`
 }
 
 type RaindropResponse struct {
-	Result bool   `json:"result"`
+	Result bool          `json:"result"`
 	Item   *RaindropItem `json:"item,omitempty"`
 }
 
@@ -33,6 +33,11 @@ func NewClient(apiToken string) *Client {
 		apiToken: apiToken,
 		client:   &http.Client{},
 	}
+}
+
+// New is an alias for NewClient for convenience
+func New(apiToken string) *Client {
+	return NewClient(apiToken)
 }
 
 // SaveArticle saves an article to Raindrop.io

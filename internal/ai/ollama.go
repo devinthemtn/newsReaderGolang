@@ -38,6 +38,11 @@ func NewClient(host, model string, db *database.DB) *Client {
 	}
 }
 
+// New is an alias for NewClient for convenience
+func New(host, model string, db *database.DB) (*Client, error) {
+	return NewClient(host, model, db), nil
+}
+
 // GetEmbedding generates an embedding for the given text
 func (c *Client) GetEmbedding(text string) ([]float64, error) {
 	reqBody := EmbeddingRequest{
@@ -137,6 +142,45 @@ func (c *Client) ScoreArticle(article *models.Article, interests []models.UserIn
 	return totalScore / totalWeight, nil
 }
 
+// AddInterest adds a user interest to the database with optional embedding generation
+func (c *Client) AddInterest(description string, weight float64) error {
+	// Check if interest already exists
+	interests, err := c.db.GetInterests()
+	if err != nil {
+		return fmt.Errorf("checking existing interests: %w", err)
+	}
+
+	for _, interest := range interests {
+		if interest.Description == description {
+			// Interest already exists, skip
+			return nil
+		}
+	}
+
+	// Create new interest
+	interest := &models.UserInterest{
+		Description: description,
+		Weight:      weight,
+	}
+
+	// Generate embedding for the interest
+	embedding, err := c.GetEmbedding(description)
+	if err != nil {
+		fmt.Printf("Warning: failed to generate embedding for interest '%s': %v\n", description, err)
+		// Continue without embedding - we can generate it later
+	} else {
+		embData, _ := json.Marshal(embedding)
+		interest.Embedding = embData
+	}
+
+	// Add to database
+	if err := c.db.AddInterest(interest); err != nil {
+		return fmt.Errorf("adding interest to database: %w", err)
+	}
+
+	return nil
+}
+
 // ScoreAllUnscored scores all articles that have a relevance score of 0
 func (c *Client) ScoreAllUnscored(maxAgeDays int) error {
 	interests, err := c.db.GetInterests()
@@ -150,11 +194,13 @@ func (c *Client) ScoreAllUnscored(maxAgeDays int) error {
 	}
 
 	// Get unread articles
-	articles, err := c.db.GetUnreadArticles(24 * time.Duration(maxAgeDays))
+	maxAge := time.Duration(maxAgeDays) * 24 * time.Hour
+	articles, err := c.db.GetUnreadArticles(maxAge)
 	if err != nil {
 		return fmt.Errorf("getting articles: %w", err)
 	}
 
+	scored := 0
 	for i, article := range articles {
 		// Skip already scored articles
 		if article.RelevanceScore > 0 {
@@ -169,11 +215,16 @@ func (c *Client) ScoreAllUnscored(maxAgeDays int) error {
 
 		if err := c.db.UpdateArticleRelevance(article.ID, score); err != nil {
 			fmt.Printf("Warning: failed to update article relevance: %v\n", err)
+			continue
 		}
 
+		scored++
 		fmt.Printf("Scored %d/%d articles\r", i+1, len(articles))
 	}
-	fmt.Println()
+
+	if len(articles) > 0 {
+		fmt.Printf("Scored %d new articles\n", scored)
+	}
 
 	return nil
 }

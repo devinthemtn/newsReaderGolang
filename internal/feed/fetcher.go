@@ -21,6 +21,11 @@ func NewFetcher(db *database.DB) *Fetcher {
 	}
 }
 
+// New is an alias for NewFetcher for convenience
+func New(db *database.DB) *Fetcher {
+	return NewFetcher(db)
+}
+
 // FetchFeed fetches and parses an RSS feed
 func (f *Fetcher) FetchFeed(feedURL string) (*gofeed.Feed, error) {
 	feed, err := f.parser.ParseURL(feedURL)
@@ -114,5 +119,6 @@ func (f *Fetcher) convertToArticle(item *gofeed.Item, feedID int64) *models.Arti
 		Content:     content,
 		Description: description,
 		PublishedAt: publishedAt,
+		FetchedAt:   time.Now(),
 	}
 }
