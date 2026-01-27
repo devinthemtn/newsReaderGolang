@@ -194,6 +194,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			items[i] = articleItem{article}
 		}
 		m.list.SetItems(items)
+		m.list.SetSize(m.width, m.height-4) // Force layout recalculation
 		m.list.ResetSelected()
 		m.statusMsg = fmt.Sprintf("Loaded %d articles", len(m.articles))
 		return m, nil
@@ -594,5 +595,6 @@ func (m *Model) applyFilter() {
 		items[i] = articleItem{article}
 	}
 	m.list.SetItems(items)
+	m.list.SetSize(m.width, m.height-4) // Force layout recalculation
 	m.list.ResetSelected()
 }
