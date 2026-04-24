@@ -215,17 +215,24 @@ func (db *DB) GetInterests() ([]models.UserInterest, error) {
 	var interests []models.UserInterest
 	for rows.Next() {
 		var interest models.UserInterest
-		var embedding sql.NullString
+		var embedding []byte
 		if err := rows.Scan(&interest.ID, &interest.Description, &interest.Weight, &embedding); err != nil {
 			return nil, fmt.Errorf("scanning interest: %w", err)
 		}
-		if embedding.Valid {
-			interest.Embedding = []byte(embedding.String)
-		}
+		interest.Embedding = embedding
 		interests = append(interests, interest)
 	}
 
 	return interests, rows.Err()
+}
+
+// UpdateInterestEmbedding updates the cached embedding for a user interest
+func (db *DB) UpdateInterestEmbedding(id int64, embedding []byte) error {
+	_, err := db.Exec("UPDATE user_interests SET embedding = ? WHERE id = ?", embedding, id)
+	if err != nil {
+		return fmt.Errorf("updating interest embedding: %w", err)
+	}
+	return nil
 }
 
 // UpdateArticleRelevance updates the relevance score of an article

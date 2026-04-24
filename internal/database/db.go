@@ -25,6 +25,10 @@ func New(dbPath string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
+	// SQLite does not support concurrent writers; a single connection avoids
+	// "database is locked" errors and ensures the schema written by one
+	// connection is visible to all subsequent queries.
+	db.SetMaxOpenConns(1)
 
 	// Enable foreign keys
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
@@ -43,16 +47,15 @@ func New(dbPath string) (*DB, error) {
 
 // initSchema creates database tables if they don't exist
 func (db *DB) initSchema() error {
-	schema := `
-		CREATE TABLE IF NOT EXISTS feeds (
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS feeds (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			url TEXT NOT NULL UNIQUE,
 			name TEXT NOT NULL,
 			enabled INTEGER NOT NULL DEFAULT 1,
 			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE TABLE IF NOT EXISTS articles (
+		)`,
+		`CREATE TABLE IF NOT EXISTS articles (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			feed_id INTEGER NOT NULL,
 			title TEXT NOT NULL,
@@ -63,28 +66,27 @@ func (db *DB) initSchema() error {
 			fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			relevance_score REAL DEFAULT 0,
 			FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE
-		);
-
-		CREATE TABLE IF NOT EXISTS user_interests (
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_interests (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			description TEXT NOT NULL,
 			weight REAL NOT NULL DEFAULT 1.0,
 			embedding BLOB
-		);
-
-		CREATE TABLE IF NOT EXISTS read_articles (
+		)`,
+		`CREATE TABLE IF NOT EXISTS read_articles (
 			article_id INTEGER PRIMARY KEY,
 			read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
-		);
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_articles_relevance_score ON articles(relevance_score)`,
+		`CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id)`,
+	}
 
-		CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at);
-		CREATE INDEX IF NOT EXISTS idx_articles_relevance_score ON articles(relevance_score);
-		CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id);
-	`
-
-	if _, err := db.Exec(schema); err != nil {
-		return fmt.Errorf("creating schema: %w", err)
+	for _, stmt := range statements {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("creating schema: %w", err)
+		}
 	}
 
 	return nil

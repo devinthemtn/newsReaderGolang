@@ -64,6 +64,12 @@ func Load(path string) (*Config, error) {
 	}
 
 	// Set defaults
+	if cfg.Database.Path == "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			cfg.Database.Path = filepath.Join(home, ".config", "newsreader", "data.db")
+		}
+	}
 	if cfg.Ollama.Host == "" {
 		cfg.Ollama.Host = "http://localhost:11434"
 	}

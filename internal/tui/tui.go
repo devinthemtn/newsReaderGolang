@@ -97,10 +97,13 @@ func New(cfg *config.Config, db *database.DB, fetcher *feed.Fetcher, aiClient *a
 	l.Styles.Title = titleStyle
 
 	// Create glamour renderer for markdown
-	renderer, _ := glamour.NewTermRenderer(
+	renderer, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(100),
 	)
+	if err != nil {
+		renderer = nil
+	}
 
 	// Create HTML to Markdown converter
 	converter := html2md.NewConverter("", true, nil)
@@ -301,7 +304,9 @@ func (m Model) handleDetailKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		// Open in browser
 		if i, ok := m.list.SelectedItem().(articleItem); ok {
-			openBrowser(i.article.URL)
+			if err := openBrowser(i.article.URL); err != nil {
+				return m, func() tea.Msg { return errorMsg{err} }
+			}
 			return m, func() tea.Msg { return statusMsg("Opened in browser") }
 		}
 
@@ -468,56 +473,44 @@ func loadArticles(db *database.DB, cfg *config.Config) tea.Cmd {
 
 func fetchFeeds(fetcher *feed.Fetcher, db *database.DB, aiClient *ai.Client, cfg *config.Config) tea.Cmd {
 	return func() tea.Msg {
-		count, err := fetcher.FetchAllFeeds()
-		if err != nil {
+		if _, err := fetcher.FetchAllFeeds(); err != nil {
 			return errorMsg{err}
 		}
 
-		// Score new articles
 		if err := aiClient.ScoreAllUnscored(cfg.UI.ArticleMaxAgeDays); err != nil {
 			return errorMsg{err}
 		}
 
-		// Clean up old articles
 		maxAge := time.Duration(cfg.UI.ArticleMaxAgeDays) * 24 * time.Hour
 		if err := db.DeleteOldArticles(maxAge); err != nil {
 			return errorMsg{err}
 		}
 
-		return statusMsg(fmt.Sprintf("Fetched %d new articles", count))
+		articles, err := db.GetUnreadArticles(maxAge)
+		if err != nil {
+			return errorMsg{err}
+		}
+		return articlesLoadedMsg{articles}
 	}
 }
 
 func deleteOldArticles(db *database.DB, cfg *config.Config) tea.Cmd {
 	return func() tea.Msg {
 		maxAge := time.Duration(cfg.UI.ArticleMaxAgeDays) * 24 * time.Hour
-		
-		// Get count before deletion for reporting
-		articles, _ := db.GetUnreadArticles(maxAge * 10) // Get articles older than max age
-		oldCount := 0
-		cutoff := time.Now().Add(-maxAge)
-		for _, article := range articles {
-			if article.PublishedAt.Before(cutoff) {
-				oldCount++
-			}
-		}
-		
-		// Delete old articles
+
 		if err := db.DeleteOldArticles(maxAge); err != nil {
 			return errorMsg{err}
 		}
-		
-		// Also delete read articles
+
 		if err := db.DeleteReadArticles(); err != nil {
 			return errorMsg{err}
 		}
-		
-		// Reload articles after deletion
+
 		articles, err := db.GetUnreadArticles(maxAge)
 		if err != nil {
 			return errorMsg{err}
 		}
-		
+
 		return articlesLoadedMsg{articles}
 	}
 }
@@ -546,28 +539,24 @@ func (m Model) formatArticleForView(article models.Article) string {
 		}
 	}
 
-	// Render the markdown with glamour
-	rendered, err := m.renderer.Render(content)
-	if err != nil {
-		// Fallback to plain text if rendering fails
-		s.WriteString(articleTitleStyle.Render(article.Title))
-		s.WriteString("\n")
-		s.WriteString(helpStyle.Render(fmt.Sprintf("Published: %s | Score: %.2f", article.PublishedAt.Format("Jan 2, 2006"), article.RelevanceScore)))
-		s.WriteString("\n\n")
-		s.WriteString(content)
-		return s.String()
+	header := articleTitleStyle.Render(article.Title) + "\n" +
+		helpStyle.Render(fmt.Sprintf("Published: %s | Score: %.2f | URL: %s",
+			article.PublishedAt.Format("Jan 2, 2006"),
+			article.RelevanceScore,
+			article.URL)) + "\n\n"
+
+	if m.renderer != nil {
+		rendered, err := m.renderer.Render(content)
+		if err == nil {
+			s.WriteString(header)
+			s.WriteString(rendered)
+			return s.String()
+		}
 	}
 
-	// Build the article view with rendered content
-	s.WriteString(articleTitleStyle.Render(article.Title))
-	s.WriteString("\n")
-	s.WriteString(helpStyle.Render(fmt.Sprintf("Published: %s | Score: %.2f | URL: %s", 
-		article.PublishedAt.Format("Jan 2, 2006"), 
-		article.RelevanceScore,
-		article.URL)))
-	s.WriteString("\n\n")
-	s.WriteString(rendered)
-
+	// Fallback to plain text
+	s.WriteString(header)
+	s.WriteString(content)
 	return s.String()
 }
 

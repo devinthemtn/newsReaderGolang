@@ -90,50 +90,31 @@ func CosineSimilarity(a, b []float64) float64 {
 	return dotProduct / (math.Sqrt(normA) * math.Sqrt(normB))
 }
 
-// ScoreArticle calculates relevance score for an article based on user interests
+// ScoreArticle calculates relevance score for an article based on user interests.
+// Interests must have their Embedding field pre-populated.
 func (c *Client) ScoreArticle(article *models.Article, interests []models.UserInterest) (float64, error) {
-	// Create text representation of article for embedding
 	articleText := fmt.Sprintf("%s. %s", article.Title, article.Description)
-
-	// Get article embedding
 	articleEmb, err := c.GetEmbedding(articleText)
 	if err != nil {
 		return 0, fmt.Errorf("getting article embedding: %w", err)
 	}
 
-	// Calculate weighted average similarity with interests
-	var totalScore float64
-	var totalWeight float64
-
+	var totalScore, totalWeight float64
 	for _, interest := range interests {
-		// Get or generate interest embedding
-		var interestEmb []float64
-		if len(interest.Embedding) > 0 {
-			if err := json.Unmarshal(interest.Embedding, &interestEmb); err != nil {
-				return 0, fmt.Errorf("unmarshaling interest embedding: %w", err)
-			}
-		} else {
-			// Generate and cache embedding
-			interestEmb, err = c.GetEmbedding(interest.Description)
-			if err != nil {
-				fmt.Printf("Warning: failed to get embedding for interest '%s': %v\n", interest.Description, err)
-				continue
-			}
-
-			// Cache embedding
-			embData, _ := json.Marshal(interestEmb)
-			interest.Embedding = embData
+		if len(interest.Embedding) == 0 {
+			continue
 		}
-
-		similarity := CosineSimilarity(articleEmb, interestEmb)
-		totalScore += similarity * interest.Weight
+		var interestEmb []float64
+		if err := json.Unmarshal(interest.Embedding, &interestEmb); err != nil {
+			continue
+		}
+		totalScore += CosineSimilarity(articleEmb, interestEmb) * interest.Weight
 		totalWeight += interest.Weight
 	}
 
 	if totalWeight == 0 {
 		return 0, nil
 	}
-
 	return totalScore / totalWeight, nil
 }
 
@@ -145,35 +126,44 @@ func (c *Client) ScoreAllUnscored(maxAgeDays int) error {
 	}
 
 	if len(interests) == 0 {
-		fmt.Println("No interests configured, skipping scoring")
 		return nil
 	}
 
-	// Get unread articles
-	articles, err := c.db.GetUnreadArticles(24 * time.Duration(maxAgeDays))
+	// Ensure all interests have embeddings cached in the DB
+	for i, interest := range interests {
+		if len(interest.Embedding) > 0 {
+			continue
+		}
+		emb, err := c.GetEmbedding(interest.Description)
+		if err != nil {
+			continue
+		}
+		embData, err := json.Marshal(emb)
+		if err != nil {
+			continue
+		}
+		interests[i].Embedding = embData
+		_ = c.db.UpdateInterestEmbedding(interest.ID, embData)
+	}
+
+	maxAge := time.Duration(maxAgeDays) * 24 * time.Hour
+	articles, err := c.db.GetUnreadArticles(maxAge)
 	if err != nil {
 		return fmt.Errorf("getting articles: %w", err)
 	}
 
-	for i, article := range articles {
-		// Skip already scored articles
+	for _, article := range articles {
 		if article.RelevanceScore > 0 {
 			continue
 		}
 
 		score, err := c.ScoreArticle(&article, interests)
 		if err != nil {
-			fmt.Printf("Warning: failed to score article '%s': %v\n", article.Title, err)
 			continue
 		}
 
-		if err := c.db.UpdateArticleRelevance(article.ID, score); err != nil {
-			fmt.Printf("Warning: failed to update article relevance: %v\n", err)
-		}
-
-		fmt.Printf("Scored %d/%d articles\r", i+1, len(articles))
+		_ = c.db.UpdateArticleRelevance(article.ID, score)
 	}
-	fmt.Println()
 
 	return nil
 }
